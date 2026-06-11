@@ -1628,13 +1628,18 @@ def apply_filter_state(df: pd.DataFrame) -> pd.DataFrame:
         st.session_state["filter_start"] = start
         st.session_state["filter_end"] = end
 
+    filtered = df[(df["Time_of_Purchase"].dt.date >= start) & (df["Time_of_Purchase"].dt.date <= end)]
+    return apply_non_time_filters(filtered)
+
+
+def apply_non_time_filters(df: pd.DataFrame) -> pd.DataFrame:
     category = st.session_state.get("filter_category", "All Categories")
     segment = st.session_state.get("filter_segment", "All Segments")
     gender = st.session_state.get("filter_gender", "All Genders")
     device = st.session_state.get("filter_device", "All Devices")
     income = st.session_state.get("filter_income", "All Levels")
 
-    filtered = df[(df["Time_of_Purchase"].dt.date >= start) & (df["Time_of_Purchase"].dt.date <= end)]
+    filtered = df
     if category != "All Categories":
         filtered = filtered[filtered["Purchase_Category"].eq(category)]
     if segment != "All Segments":
@@ -1849,7 +1854,8 @@ def render_dashboard(records: pd.DataFrame, all_records: pd.DataFrame) -> None:
     customers = records["Customer_ID"].nunique()
     aov = revenue / orders if orders else 0
     avg_satisfaction = records["Customer_Satisfaction"].mean() if orders else 0
-    loyalty_count = int(records["Loyalty_Member"].sum())
+    unique_customers = customer_table(records)
+    loyalty_count = int(unique_customers["Customer_ID"].nunique()) if not unique_customers.empty else 0
     loyalty_ratio = records["Loyalty_Member"].mean() * 100 if orders else 0
     retention = all_records["Loyalty_Member"].mean() * 100 if len(all_records) else 0
     q1 = all_records.loc[all_records["Purchase_Quarter"].eq(1), "Purchase_Amount"].sum()
@@ -1889,6 +1895,9 @@ def render_dashboard(records: pd.DataFrame, all_records: pd.DataFrame) -> None:
 
     left, right = st.columns([1.4, 1])
     monthly = records.groupby("Purchase_Month_Name", as_index=False).agg(revenue=("Purchase_Amount", "sum"), orders=("Purchase_Amount", "size"))
+    monthly = pd.DataFrame({"Purchase_Month_Name": MONTH_ORDER}).merge(monthly, how="left", on="Purchase_Month_Name")
+    monthly["revenue"] = monthly["revenue"].fillna(0)
+    monthly["orders"] = monthly["orders"].fillna(0)
     monthly["order"] = monthly["Purchase_Month_Name"].map({m: i for i, m in enumerate(MONTH_ORDER)})
     monthly = monthly.sort_values("order")
     with left:
