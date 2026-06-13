@@ -118,11 +118,10 @@ def inject_theme() -> None:
         [data-testid="stSidebar"] .stButton > button {
             width: 100%;
             min-height: 54px;
-            display: grid !important;
-            grid-template-columns: 34px minmax(0, 1fr);
-            column-gap: 0.72rem;
+            display: flex !important;
+            gap: 0.72rem;
             align-items: center;
-            justify-content: stretch;
+            justify-content: flex-start;
             text-align: left;
             border-radius: 12px;
             border: 1px solid transparent;
@@ -139,6 +138,8 @@ def inject_theme() -> None:
         }
         [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] {
             min-width: 0;
+            width: 100%;
+            flex: 1 1 auto;
             text-align: left;
         }
         [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] strong {
@@ -158,10 +159,12 @@ def inject_theme() -> None:
         }
         [data-testid="stSidebar"] .stButton > button span[data-testid="stIconMaterial"] {
             width: 28px;
+            min-width: 28px;
             height: 28px;
             border-radius: 8px;
-            display: grid;
+            display: grid !important;
             place-items: center;
+            flex: 0 0 28px;
             color: #93c5fd !important;
             margin: 0 !important;
             font-size: 1.05rem !important;
