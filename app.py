@@ -118,7 +118,11 @@ def inject_theme() -> None:
         [data-testid="stSidebar"] .stButton > button {
             width: 100%;
             min-height: 54px;
-            justify-content: flex-start;
+            display: grid !important;
+            grid-template-columns: 34px minmax(0, 1fr);
+            column-gap: 0.72rem;
+            align-items: center;
+            justify-content: stretch;
             text-align: left;
             border-radius: 12px;
             border: 1px solid transparent;
@@ -132,6 +136,35 @@ def inject_theme() -> None:
         [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] p {
             margin: 0;
             line-height: 1.12;
+        }
+        [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] {
+            min-width: 0;
+            text-align: left;
+        }
+        [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] strong {
+            color: #cbd5e1;
+            display: block;
+            font-size: 0.86rem;
+            font-weight: 850;
+            line-height: 1.12;
+        }
+        [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] small {
+            color: #8aa0c0 !important;
+            display: block;
+            font-size: 0.66rem;
+            font-weight: 650;
+            line-height: 1.15;
+            margin-top: 0.18rem;
+        }
+        [data-testid="stSidebar"] .stButton > button span[data-testid="stIconMaterial"] {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            color: #93c5fd !important;
+            margin: 0 !important;
+            font-size: 1.05rem !important;
         }
         .side-btn-title {
             color: #cbd5e1;
@@ -923,6 +956,13 @@ def inject_theme() -> None:
             display:flex !important;
             justify-content:flex-end !important;
             width:100% !important;
+            margin-left:auto !important;
+        }
+        .st-key-trend_metric_picker {
+            width:100% !important;
+            display:flex !important;
+            justify-content:flex-end !important;
+            margin-left:auto !important;
         }
         .st-key-trend_metric_picker [data-testid="stButtonGroup"] > div {
             display:inline-flex !important;
@@ -2690,7 +2730,7 @@ def render_trends(records: pd.DataFrame) -> tuple[list[str], list[str]]:
     selected_week, selected_month = current_trend_cell()
     selected_cell = matrix[(matrix["Week_Index"].eq(selected_week)) & (matrix["Purchase_Month_Name"].eq(selected_month))].iloc[0]
     heatmap_card = st.container(border=True)
-    header_left, header_right = heatmap_card.columns([1.25, 0.95], vertical_alignment="center")
+    header_left, header_right = heatmap_card.columns([1.9, 0.7], vertical_alignment="center")
     header_left.markdown(
         """
         <span class="metric-label" style="background:#f1f5f9;border-radius:6px;padding:0.32rem 0.55rem;color:#334155;">Heat Vector Index</span>
