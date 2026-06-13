@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import time
 from html import escape
 from datetime import date
@@ -2982,24 +2983,51 @@ def generate_insights(records: pd.DataFrame, peak_months: list[str], peak_days: 
         return fallback
 
     try:
-        from google import genai
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-        client = genai.Client(api_key=api_key)
-        prompt = (
-            "Return strict JSON with keys customerInsights, salesInsights, productInsights, segmentInsights, recommendationInsights. "
-            "Each value must be one detailed strategic advisor paragraph of 90-130 words, written like an executive e-commerce AI Studio analysis. "
-            "Use concrete metrics, risks, and recommended actions; do not be generic. "
-            f"Analyze e-commerce aggregates: total_revenue={total_revenue}, total_customers={total_customers}, "
-            f"aov={aov}, avg_satisfaction={avg_satisfaction}, segments={segments}, categories={categories.head(8).to_dict()}, "
-            f"peak_months={peak_months}, peak_days={peak_days}, weak_months={weak_months}, weak_days={weak_days}, "
-            f"top_device={top_device}, second_device={second_device}, loyalty_ratio={loyalty_ratio}, low_rating_pct={low_rating_pct}."
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You are an executive e-commerce analytics advisor. Return only strict JSON with keys "
+                    "customerInsights, salesInsights, productInsights, segmentInsights, recommendationInsights. "
+                    "Each value must be one detailed strategic advisor paragraph of 90-130 words. "
+                    "Use concrete metrics, risks, and recommended actions; do not be generic.",
+                ),
+                ("human", "{analytics_payload}"),
+            ]
         )
-        response = client.models.generate_content(
+        llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
-            contents=prompt,
-            config={"response_mime_type": "application/json"},
+            google_api_key=api_key,
+            temperature=0.35,
         )
-        parsed = json.loads(response.text)
+        chain = prompt | llm | StrOutputParser()
+        analytics_payload = json.dumps(
+            {
+                "total_revenue": round(float(total_revenue), 2),
+                "total_customers": int(total_customers),
+                "total_transactions": int(len(records)),
+                "aov": round(float(aov), 2),
+                "avg_satisfaction": round(float(avg_satisfaction), 2),
+                "segments": segments,
+                "top_categories": categories.head(8).to_dict(),
+                "peak_months": peak_months,
+                "peak_days": peak_days,
+                "weak_months": weak_months,
+                "weak_days": weak_days,
+                "top_device": str(top_device),
+                "second_device": str(second_device),
+                "loyalty_ratio": round(float(loyalty_ratio), 1),
+                "low_rating_pct": round(float(low_rating_pct), 1),
+            }
+        )
+        ai_text = chain.invoke({"analytics_payload": analytics_payload}).strip()
+        if ai_text.startswith("```"):
+            ai_text = ai_text.strip("`").replace("json\n", "", 1).strip()
+        parsed = json.loads(ai_text)
         return {
             "Customer Insights": parsed.get("customerInsights", fallback["Customer Insights"]),
             "Sales Insights": parsed.get("salesInsights", fallback["Sales Insights"]),
@@ -3011,6 +3039,18 @@ def generate_insights(records: pd.DataFrame, peak_months: list[str], peak_days: 
         return fallback
 
 
+def ai_runtime_status() -> tuple[str, str, str]:
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY", None)
+    except Exception:
+        api_key = None
+    if not api_key:
+        return "Local Fallback", "GEMINI_API_KEY not configured", "#64748b"
+    if importlib.util.find_spec("langchain_google_genai") is None:
+        return "Local Fallback", "LangChain Google GenAI package not installed", "#d97706"
+    return "Gemini + LangChain Active", "Live generative AI enabled", "#10b981"
+
+
 def render_ai_insights(records: pd.DataFrame, peak_months: list[str], peak_days: list[str]) -> None:
     title_map = [
         ("Customer Insights", "Customer Portfolios & Behavior", "01", "violet"),
@@ -3020,12 +3060,18 @@ def render_ai_insights(records: pd.DataFrame, peak_months: list[str], peak_days:
         ("Recommendation Insights", "AI Personal Recommendation Actions & Cross-Selling", "05", "violet"),
     ]
 
+    engine_label, engine_detail, engine_color = ai_runtime_status()
     with st.container(border=True):
         hero_left, hero_right = st.columns([1.55, 0.52], vertical_alignment="center")
         hero_left.markdown(
-            """
+            f"""
             <div class="ai-board-title">AI Executive Advisor Board</div>
-            <div class="card-subtitle">Strategic marketing blueprints generated live via server-side Gemini semantic models.</div>
+            <div class="card-subtitle">Strategic marketing blueprints generated live via LangChain-orchestrated Gemini semantic models.</div>
+            <div style="display:inline-flex;align-items:center;gap:0.45rem;margin-top:0.7rem;border:1px solid #dbe5f0;border-radius:999px;background:#ffffff;padding:0.32rem 0.62rem;font-size:0.74rem;font-weight:800;color:#334155;">
+                <span style="width:0.48rem;height:0.48rem;border-radius:999px;background:{engine_color};display:inline-block;"></span>
+                {escape(engine_label)}
+                <span style="color:#94a3b8;font-weight:700;">{escape(engine_detail)}</span>
+            </div>
             """,
             unsafe_allow_html=True,
         )
