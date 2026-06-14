@@ -1,5 +1,6 @@
 import json
 import importlib.util
+import math
 import time
 from html import escape
 from datetime import date
@@ -11,6 +12,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 DATASET_URL = "https://docs.google.com/spreadsheets/d/1aX6GynZaDd3leFEWfU16wnpxP-PjgyCiaetOkHvCooQ/export?format=csv"
@@ -21,11 +23,11 @@ SEGMENT_COLORS = {
     "High Value Customers": "#10b981",
     "Loyal Customers": "#3b82f6",
     "Frequent Buyers": "#8b5cf6",
-    "Potential Loyalists": "#06b6d4",
-    "New Customers": "#f59e0b",
+    "Potential Loyalists": "#22c55e",
+    "New Customers": "#facc15",
     "At Risk Customers": "#f97316",
     "Lost Customers": "#ef4444",
-    "Regular Customers": "#64748b",
+    "Regular Customers": "#0ea5e9",
 }
 SEGMENT_STRATEGY = {
     "High Value Customers": (
@@ -459,6 +461,23 @@ def inject_theme() -> None:
             text-align: center;
             margin-top: 5rem;
         }
+        .side-credit {
+            margin-top: 1.05rem;
+            padding-top: 0.9rem;
+            border-top: 1px solid rgba(148, 163, 184, 0.18);
+            color: #8aa0c0;
+            text-align: center;
+            font-size: 0.68rem;
+            line-height: 1.55;
+        }
+        .side-credit b {
+            display: block;
+            color: #dbeafe;
+            font-size: 0.74rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.35rem;
+        }
         .top-filter-pill {
             background: #ffffff;
             border: 1px solid #dbe4ee;
@@ -564,6 +583,23 @@ def inject_theme() -> None:
             border-color: #0f172a;
             color: #ffffff;
         }
+        .st-key-active_segment_radio div[role="radiogroup"] label:has(input:checked) {
+            color: #ffffff !important;
+            box-shadow: inset 4px 0 0 var(--cohort-active, #10b981), 0 8px 18px rgba(15, 23, 42, 0.12);
+            border-color: color-mix(in srgb, var(--cohort-active, #10b981) 55%, #0f172a);
+        }
+        .st-key-active_segment_radio div[role="radiogroup"] label:has(input:checked) input {
+            background: var(--cohort-active, #10b981) !important;
+            box-shadow: 0 0 0 4px color-mix(in srgb, var(--cohort-active, #10b981) 18%, transparent);
+        }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(1) { --cohort-active:#10b981; }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(2) { --cohort-active:#0ea5e9; }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(3) { --cohort-active:#22c55e; }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(4) { --cohort-active:#ef4444; }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(5) { --cohort-active:#f97316; }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(6) { --cohort-active:#facc15; }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(7) { --cohort-active:#3b82f6; }
+        .st-key-active_segment_radio div[role="radiogroup"] label:nth-child(8) { --cohort-active:#8b5cf6; }
         div[role="radiogroup"] label input {
             appearance: none;
             width: 10px;
@@ -1303,6 +1339,16 @@ def fmt_currency(value: float) -> str:
     return f"${value:,.2f}"
 
 
+def hex_to_rgba(hex_color: str, alpha: float) -> str:
+    color = hex_color.strip().lstrip("#")
+    if len(color) != 6:
+        return f"rgba(148, 163, 184, {alpha})"
+    red = int(color[0:2], 16)
+    green = int(color[2:4], 16)
+    blue = int(color[4:6], 16)
+    return f"rgba({red}, {green}, {blue}, {alpha})"
+
+
 @st.dialog("Client Outreach Dossier", width="large")
 def show_client_dossier(row_data: dict) -> None:
     name = str(row_data.get("Customer_Name") or f"Client {row_data.get('Customer_ID', '')}")
@@ -1835,6 +1881,13 @@ def render_sidebar_summary(records: pd.DataFrame, filtered: pd.DataFrame) -> Non
             Complete 2024 Scope Active
         </div>
         <div class="side-footer">SYSTEM ONLINE - {total_rows:,} RECORDS</div>
+        <div class="side-credit">
+            <b>Kelompok 9 DSGA</b>
+            Abidzar Naufal Ghifari<br>
+            Hafidz Muhammad Imanul Haq Abdurrahman<br>
+            Damar Prana Anggakara<br>
+            Arif Rahman Hakim
+        </div>
         """,
         unsafe_allow_html=True,
     )
@@ -1845,7 +1898,7 @@ def render_sidebar_nav() -> str:
         ("Executive Dashboard", "KPI Cards & Sales Demographics", "dashboard", ":material/analytics:"),
         ("Customer Segmentation", "RFM Clusters & Target Strategy", "layers", ":material/layers:"),
         ("Customer Profiles", "Individual Profiles & Metrics Search", "profile", ":material/manage_accounts:"),
-        ("Sales Trend Analysis", "Seasonality & Next 30-Day Forecasts", "calendar", ":material/calendar_month:"),
+        ("Sales Trend Analysis", "Heatmap & Seasonal Cohort Patterns", "calendar", ":material/calendar_month:"),
         ("AI Insights", "Automated Strategic Advisory", "brain", ":material/neurology:"),
     ]
     nav_icons = {
@@ -1981,6 +2034,9 @@ def render_dashboard(records: pd.DataFrame, all_records: pd.DataFrame) -> None:
 
     cat = records.groupby("Purchase_Category", as_index=False).agg(revenue=("Purchase_Amount", "sum"), orders=("Purchase_Amount", "size"))
     cat = cat.sort_values("revenue", ascending=False).head(8)
+    cat_total = max(float(cat["revenue"].sum()), 1.0)
+    cat["share"] = cat["revenue"] / cat_total * 100
+    cat["legend_label"] = cat.apply(lambda row: f"{row['Purchase_Category']} ({row['share']:.1f}%)", axis=1)
     with right:
         st.markdown(
             """
@@ -1991,30 +2047,149 @@ def render_dashboard(records: pd.DataFrame, all_records: pd.DataFrame) -> None:
             """,
             unsafe_allow_html=True,
         )
-        donut_colors = ["#0284c7", "#0ea5e9", "#38bdf8", "#14b8a6", "#2dd4bf", "#94a3b8", "#6366f1", "#8b5cf6"]
-        fig = go.Figure(
-            data=[
-                go.Pie(
-                    labels=cat["Purchase_Category"],
-                    values=cat["revenue"],
-                    hole=0.62,
-                    marker=dict(colors=donut_colors, line=dict(color="white", width=4)),
-                    textinfo="none",
-                    hovertemplate="%{label}<br>$%{value:,.2f}<extra></extra>",
-                )
-            ]
-        )
-        fig.update_layout(
-            height=330,
-            margin=dict(l=8, r=8, t=8, b=8),
-            paper_bgcolor="white",
-            showlegend=True,
-            legend=dict(orientation="h", y=-0.05, font=dict(size=10, color="#334155")),
-            annotations=[
-                dict(text=f"<b>TOTAL</b><br>{fmt_currency(revenue).replace('.00', '')}", x=0.5, y=0.5, showarrow=False, font=dict(size=13, color="#0f172a"))
-            ],
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        donut_colors = ["#0ea5e9", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#14b8a6", "#64748b", "#ec4899"]
+
+        def polar_to_xy(cx: float, cy: float, radius: float, angle: float) -> tuple[float, float]:
+            radians = math.radians(angle)
+            return cx + radius * math.cos(radians), cy + radius * math.sin(radians)
+
+        def donut_arc(cx: float, cy: float, outer: float, inner: float, start: float, end: float) -> str:
+            outer_start = polar_to_xy(cx, cy, outer, start)
+            outer_end = polar_to_xy(cx, cy, outer, end)
+            inner_end = polar_to_xy(cx, cy, inner, end)
+            inner_start = polar_to_xy(cx, cy, inner, start)
+            large_arc = 1 if end - start > 180 else 0
+            return (
+                f"M {outer_start[0]:.3f} {outer_start[1]:.3f} "
+                f"A {outer} {outer} 0 {large_arc} 1 {outer_end[0]:.3f} {outer_end[1]:.3f} "
+                f"L {inner_end[0]:.3f} {inner_end[1]:.3f} "
+                f"A {inner} {inner} 0 {large_arc} 0 {inner_start[0]:.3f} {inner_start[1]:.3f} Z"
+            )
+
+        start_angle = -90.0
+        slice_paths = []
+        legend_items = []
+        for idx, row in cat.reset_index(drop=True).iterrows():
+            share = float(row["share"])
+            end_angle = start_angle + (share / 100 * 360)
+            color = donut_colors[idx % len(donut_colors)]
+            category = str(row["Purchase_Category"])
+            revenue_value = float(row["revenue"])
+            path = donut_arc(120, 120, 88, 52, start_angle, end_angle)
+            mid_angle = (start_angle + end_angle) / 2
+            label_x, label_y = polar_to_xy(120, 120, 70, mid_angle)
+            show_label = share >= 5
+            slice_paths.append(
+                f"""
+                <g class="donut-segment-wrap">
+                    <path class="donut-segment" d="{path}" fill="{color}">
+                        <title>{escape(category)} - {fmt_currency(revenue_value)} ({share:.1f}%)</title>
+                    </path>
+                    {'<text class="donut-percent" x="' + f'{label_x:.1f}' + '" y="' + f'{label_y:.1f}' + '">' + f'{share:.1f}%' + '</text>' if show_label else ''}
+                </g>
+                """
+            )
+            legend_items.append(
+                f"""
+                <div class="donut-legend-item">
+                    <span style="background:{color};"></span>
+                    <div>{escape(category)} <b>{share:.1f}%</b></div>
+                </div>
+                """
+            )
+            start_angle = end_angle
+
+        donut_html = f"""
+            <div class="category-donut-card">
+                <svg class="category-donut" viewBox="0 0 240 240" role="img" aria-label="Category market share donut chart">
+                    {''.join(slice_paths)}
+                    <circle cx="120" cy="120" r="46" fill="#ffffff"></circle>
+                    <text class="donut-total-label" x="120" y="113">TOTAL</text>
+                    <text class="donut-total-value" x="120" y="132">{fmt_currency(revenue).replace('.00', '')}</text>
+                </svg>
+                <div class="donut-legend-grid">{''.join(legend_items)}</div>
+            </div>
+            <style>
+                .category-donut-card {{
+                    background:#ffffff;
+                    border-radius:0 0 12px 12px;
+                    padding:0.35rem 0.75rem 0.8rem;
+                }}
+                .category-donut {{
+                    width:100%;
+                    max-width:300px;
+                    display:block;
+                    margin:0.1rem auto 0.45rem;
+                    overflow:visible;
+                }}
+                .donut-segment {{
+                    cursor:pointer;
+                    stroke:#ffffff;
+                    stroke-width:2.5;
+                    transform-box:fill-box;
+                    transform-origin:center;
+                    transition:transform 180ms ease, opacity 180ms ease, filter 180ms ease;
+                }}
+                .category-donut:hover .donut-segment {{
+                    opacity:0.34;
+                }}
+                .category-donut .donut-segment:hover {{
+                    opacity:1;
+                    transform:scale(1.075);
+                    filter:drop-shadow(0 8px 12px rgba(15, 23, 42, 0.22));
+                }}
+                .donut-percent {{
+                    fill:#ffffff;
+                    font-size:8px;
+                    font-weight:900;
+                    text-anchor:middle;
+                    dominant-baseline:middle;
+                    pointer-events:none;
+                }}
+                .donut-total-label,
+                .donut-total-value {{
+                    text-anchor:middle;
+                    fill:#0f172a;
+                    pointer-events:none;
+                }}
+                .donut-total-label {{
+                    font-size:10px;
+                    font-weight:900;
+                }}
+                .donut-total-value {{
+                    font-size:9px;
+                    font-weight:700;
+                }}
+                .donut-legend-grid {{
+                    display:grid;
+                    grid-template-columns:repeat(2, minmax(0, 1fr));
+                    gap:0.52rem 0.75rem;
+                    padding:0.35rem 0.15rem 0;
+                }}
+                .donut-legend-item {{
+                    display:grid;
+                    grid-template-columns:12px minmax(0, 1fr);
+                    gap:0.45rem;
+                    align-items:center;
+                    color:#334155;
+                    font-size:0.68rem;
+                    font-weight:700;
+                    line-height:1.18;
+                    min-width:0;
+                }}
+                .donut-legend-item span {{
+                    width:10px;
+                    height:10px;
+                    border-radius:2px;
+                }}
+                .donut-legend-item div {{
+                    white-space:nowrap;
+                    overflow:hidden;
+                    text-overflow:ellipsis;
+                }}
+            </style>
+            """
+        components.html(donut_html, height=405, scrolling=False)
 
     top_products = records.assign(
         Product_Display=lambda d: np.where(
@@ -2055,15 +2230,20 @@ def render_dashboard(records: pd.DataFrame, all_records: pd.DataFrame) -> None:
 
     customers_df = customer_table(records)
     top_revenue_customers = customers_df.head(5).copy()
-    top_revenue_customers["Demographics"] = top_revenue_customers.apply(lambda r: f"{int(r['Age'])} y/o ({r['Gender']})", axis=1)
+    top_revenue_customers["Customer Name"] = top_revenue_customers["Customer_Name"]
+    top_revenue_customers["Customer Profile"] = top_revenue_customers.apply(lambda r: f"{int(r['Age'])} y/o ({r['Gender']})", axis=1)
+    top_revenue_customers["Spending Segment"] = top_revenue_customers["rfmSegment"]
     top_revenue_customers["Order Amount"] = top_revenue_customers["Purchase_Amount"].map(fmt_currency)
-    top_revenue_customers = top_revenue_customers[["Customer_ID", "Demographics", "Location", "rfmSegment", "Order Amount"]]
+    top_revenue_customers = top_revenue_customers[["Customer Name", "Customer Profile", "Location", "Spending Segment", "Order Amount"]]
 
     top_frequency_customers = customers_df.sort_values("Frequency_of_Purchase", ascending=False).head(5).copy()
+    top_frequency_customers["Customer Name"] = top_frequency_customers["Customer_Name"]
+    top_frequency_customers["Favorite Category"] = top_frequency_customers["Favorite_Category"]
+    top_frequency_customers["Spending Segment"] = top_frequency_customers["rfmSegment"]
     top_frequency_customers["Average Satisfaction"] = top_frequency_customers["Customer_Satisfaction"].map(lambda v: f"{v:.1f} / 10")
-    top_frequency_customers["Loyalty Frequency"] = top_frequency_customers["Frequency_of_Purchase"].map(lambda v: f"{int(v)} purchases")
+    top_frequency_customers["Purchase Frequency"] = top_frequency_customers["Frequency_of_Purchase"].map(lambda v: f"{int(v)} purchases")
     top_frequency_customers = top_frequency_customers[
-        ["Customer_ID", "Favorite_Category", "rfmSegment", "Average Satisfaction", "Loyalty Frequency"]
+        ["Customer Name", "Favorite Category", "Spending Segment", "Average Satisfaction", "Purchase Frequency"]
     ]
 
     with col_b:
@@ -2189,10 +2369,9 @@ def render_segmentation(records: pd.DataFrame) -> None:
             st.markdown("<hr style='border:none;border-top:1px solid #e2e8f0;margin:0.9rem 0;'>", unsafe_allow_html=True)
             donut_labels = segment_stats["rfmSegment"].tolist()
             donut_values = segment_stats["customers"].tolist()
-            muted_colors = ["#cbd5e1", "#67e8f9", "#fca5a5", "#fdba74", "#fcd34d", "#93c5fd", "#ddd6fe", "#a7f3d0"]
             donut_colors = [
-                SEGMENT_COLORS.get(label, "#10b981") if label == active_segment else muted_colors[idx % len(muted_colors)]
-                for idx, label in enumerate(donut_labels)
+                SEGMENT_COLORS.get(label, "#10b981") if label == active_segment else hex_to_rgba(SEGMENT_COLORS.get(label, "#94a3b8"), 0.34)
+                for label in donut_labels
             ]
             total_donut = max(sum(donut_values), 1)
             cursor = 0.0
